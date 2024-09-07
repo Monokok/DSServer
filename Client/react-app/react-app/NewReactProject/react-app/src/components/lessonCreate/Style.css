@@ -1,0 +1,13 @@
+
+  .button {
+    background-color: #3c9fa4; /* Цвет фона */
+    color: white; /* Цвет текста */
+    padding: 10px 20px; /* Отступы внутри кнопки */
+    border: none; /* Убрать границу */
+    border-radius: 5px; /* Скругление углов */
+    cursor: pointer; /* Изменить курсор при наведении */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Тень */
+    transition: background-color 0.3s; /* Плавное изменение цвета при наведении */
+    margin-left: 100px; /* Отступ кнопки слева */
+    margin-top: 10px;
+  }  

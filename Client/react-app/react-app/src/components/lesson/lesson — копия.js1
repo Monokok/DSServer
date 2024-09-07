@@ -1,0 +1,100 @@
+import "./Style.css";
+import React, { useEffect } from "react";
+import "./Style.css";
+
+// Путь к API серверной части
+const url = "https://localhost:7230/api/";
+
+// Компонент занятий принимает список занятий и функцию изменения состояния
+const Lesson = ({ lessons, setLessons, removeLesson }) => { //состояние и два метода
+  //Функция, переданная в useEffect, будет запущена после того, как рендер будет зафиксирован на экране
+  // Срабатывает перед рендерингом компонента при изменении setLessons
+  useEffect(() => {
+    // Выполняется функция получения данных от Сервера
+    const getLessons = async () => {
+      const requestOptions = {
+        method: "GET",
+      };
+      return await fetch(`${url}lessons`, requestOptions)
+        .then((response) => response.json())
+        .then(
+          (data) => {
+            // data - данные от сервера
+            console.log("Data:", data);
+            setLessons(data); // Изменение состояния списка занятий
+          },
+          (error) => {
+            console.log(error);
+          }
+        );
+    };
+    getLessons();
+  }, [setLessons]);
+
+  const deleteItem = async ({ id }) => {
+    const requestOptions = {
+      method: "DELETE",
+    };
+    return await fetch(
+      `https://localhost:7230/api/Lessons/${id}`,
+      requestOptions
+    ).then(
+      (response) => {
+        if (response.ok) {
+          removeLesson(id);
+        }
+      },
+      (error) => console.log(error)
+    );
+  };
+
+  return (
+    // <React.Fragment>
+    //   <h3>Список занятий</h3>
+    //   {lessons.map((lesson) => (
+    //     <div className="Lesson" key={lesson.id} id={lesson.id}>
+    //       <strong>
+    //         {" "}
+    //         {lesson.id}: {lesson.date}{" "}
+    //       </strong>
+    //       <button onClick={(e) => deleteItem(lesson.id)}>Удалить</button>
+    //       {lesson.student.map((student) => (
+    //         <div className="student" key={student.id} id={student.id}>
+    //           {student.middleName} <br />
+    //           {student.firstName} <hr />
+    //           {student.lastName} <hr />
+    //         </div>
+    //       ))}
+    //     </div>
+    //   ))}
+    // </React.Fragment>
+    <React.Fragment>
+      <h3>Список моих занятий:</h3>
+      {lessons.map(//map - вывод из массива
+        (
+          { id, date, student } //{} для
+        ) => (
+          <div className="Lesson" key={id} id={id}>
+            <li><strong>
+              {" "}
+              
+              {id}: {date}{" "}
+           
+            </strong>
+            <button onClick={(e) => deleteItem({ id }).then(console.log(id))}>Удалить</button>
+            </li>
+
+            {/* {student.map(({id, firstName, lastName, middleName }) => (
+              <div className="student" key={id} id={id}>
+                {middleName} <br />
+                {firstName} <hr />
+                {lastName} <hr />
+              </div>
+            ))} */}
+          </div>
+        )
+      )}
+    </React.Fragment>
+  );
+};
+export default Lesson;
