@@ -42,5 +42,3 @@
 | **Язык** | JavaScript / C# |
 
 ---
-git clone https://github.com/username/drivingschool-app.git
-cd drivingschool-app
