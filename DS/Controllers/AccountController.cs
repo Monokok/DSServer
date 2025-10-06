@@ -4,6 +4,7 @@ using DomainModel;
 using Interfaces.DTO;
 using Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -30,19 +31,27 @@ namespace DS.Controllers
         private readonly DrivingSchoolContext db;
         private readonly ILogger<AccountController> _logger;
         private readonly IConfiguration _configuration;
+        private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly IWebHostEnvironment _webHostEnvironment;
+
 
         public AccountController(
             UserManager<User> userManager,
             //SignInManager<User> signInManager,
             DrivingSchoolContext context,
             ILogger<AccountController> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            RoleManager<IdentityRole> roleManager,
+            IWebHostEnvironment webHostEnvironment)
         {
             _logger = logger;
             _userManager = userManager;
             //_signInManager = signInManager;
             db = context;
             _configuration = configuration;
+            _roleManager = roleManager;
+            _webHostEnvironment = webHostEnvironment;
+
         }
 
         [Authorize]
@@ -125,33 +134,41 @@ namespace DS.Controllers
             {
                 if (ModelState.IsValid)
                 {
+                    // Получаем список доступных ролей из RoleManager
+                    var allowedRoles = await _roleManager.Roles.Select(r => r.Name.ToLower()).ToListAsync();
+
+                    // Проверяем, существует ли указанная роль
+                    if (!allowedRoles.Contains(model.Role.ToLower()))
+                    {
+                        return BadRequest(new
+                        {
+                            message = $"Недопустимая роль. Доступные роли: {string.Join(", ", allowedRoles)}."
+                        });
+                    }
+
                     Random random = new Random();
                     User user = new()
                     {
                         Email = model.Email,
                         UserName = model.Email,
-                        A_hours = 0,
-                        B_hours = 0,
-                        C_hours = 0,
                         First_name = model.FirstName,
                         Middle_name = model.MiddleName,
                         Last_name = model.LastName,
                         TwoFactorEnabled = false,
-                        //AccountType = 0, //тип аккаунта 1 = студент
-                        PhoneNumber = "7(910)000-50-" + random.Next(10, 99),
+                        PhoneNumber = model.PhoneNumber ?? $"7(910)000-50-{random.Next(10, 99)}"
                     };
+
                     // Добавление нового пользователя
                     var result = await _userManager.CreateAsync(user, model.Password);
                     if (result.Succeeded)
                     {
-                        // Установка роли User
-                        await _userManager.AddToRoleAsync(user, "student");
+                        // Установка роли
+                        await _userManager.AddToRoleAsync(user, model.Role.ToLower());
+
                         // Генерация токена
                         var token = await GenerateJwtToken(user);
 
-                        //// Установка куки заменено на токен 07/09/2024
-                        //await _signInManager.SignInAsync(user, false);
-                        return Ok(new { token, message = "Добавлен новый пользователь: " + user.UserName });
+                        return Ok(new { token, message = $"Добавлен новый пользователь: {user.UserName} с ролью {model.Role}" });
                     }
                     else
                     {
@@ -159,30 +176,33 @@ namespace DS.Controllers
                         {
                             ModelState.AddModelError(string.Empty, error.Description);
                         }
-                        var errorMsg = new
+                        var errorMessage = new
                         {
                             message = "Пользователь не добавлен",
                             error = ModelState.Values.SelectMany(e => e.Errors.Select(er => er.ErrorMessage))
                         };
-                        return Created("", errorMsg);
+                        return BadRequest(errorMessage);
                     }
                 }
                 else
                 {
-                    var errorMsg = new
+                    var errorMessage = new
                     {
                         message = "Неверные входные данные",
                         error = ModelState.Values.SelectMany(e => e.Errors.Select(er => er.ErrorMessage))
                     };
-                    return Created("", errorMsg);
+                    return BadRequest(errorMessage);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка в методе Register");
-                return StatusCode(500);//, "Внутренняя ошибка сервера"
+                return StatusCode(500);
             }
         }
+
+
+
         [HttpPost]
         [Route("api/account/login")]
         [AllowAnonymous]
@@ -190,58 +210,46 @@ namespace DS.Controllers
         {
             try
             {
-                //if (ModelState.IsValid)
-                //{
-                //    //обработка входа по данным
-                //    var result = await _signInManager.PasswordSignInAsync(
-                //        model.Email,
-                //        model.Password,
-                //        model.RememberMe,
-                //        false
-                //        );
-                //    if (result.Succeeded) //если вход успешен
-                //    {
-                //        //string? id = db.Users.Where(i => i.Email == model.Email).FirstOrDefault().Id;
-                //        var userByEmail = await _userManager.FindByEmailAsync(model.Email); //для отправки юзеру его данных
-                //        if (userByEmail != null)
-                //        {
-                //            var token = await GenerateJwtToken(userByEmail);
-                //            return Ok(new
-                //            {
-                //                token,
-                //                user = new userDTO(userByEmail)
-                //            });
-                //        }
-                //        else
-                //        {
-                //            return StatusCode(500);//если данные в бд невалидны (проблемы н-р с почтой)
-                //        }
-                //        //IList<string>? roles = await _userManager.GetRolesAsync(userByEmail);
-                //        //string? userRole = roles.FirstOrDefault();
-                //        //userDTO user = new userDTO(userByEmail);
-                //        //user.userRole = userRole;
-                //    }
-                //    else
-                //    {
-                //        ModelState.AddModelError("", "Неправильный логин и (или) пароль");
-                //        var errorMsg = new
-                //        {
-                //            message = "Вход не выполнен",
-                //            error = ModelState.Values.SelectMany(e => e.Errors.Select(er => er.ErrorMessage))
-                //        };
-                //        return Created("", errorMsg);
-                //    }
-                //}
                 if (ModelState.IsValid)
                 {
                     var user = await _userManager.FindByEmailAsync(model.Email);
                     if (user != null && await _userManager.CheckPasswordAsync(user, model.Password))
                     {
                         var token = await GenerateJwtToken(user);
+                        var resultUser = new userDTO(user);
+
+                        //Заполнение полей:
+
+                        resultUser.user_roles = (await _userManager.GetRolesAsync(user)).ToList();
+                        // Инициализируем переменную для основной роли
+                        string primaryRole = "Не определена"; // Инициализация с начальным значением
+                        // Проверяем, есть ли роль преподавателя
+                        if (resultUser.user_roles.Contains("teacher"))
+                        {
+                            primaryRole = "Преподаватель";
+                        }
+                        // Если нет, проверяем роль студента
+                        else if (resultUser.user_roles.Contains("student"))
+                        {
+                            primaryRole = "Обучающийся";
+                        }
+                        // Если нет, проверяем роль администратора
+                        else if (resultUser.user_roles.Contains("admin"))
+                        {
+                            primaryRole = "Администратор";
+                        }
+                        // В resultUser можем добавить основную роль
+                        resultUser.PrimaryRole = primaryRole;
+
+                        resultUser.profileImage = GetProfileImageUrlByUserId(resultUser.id);
+
+
+
+                        //Возврат
                         return Ok(new
                         {
                             token,
-                            user = new userDTO(user)
+                            user = resultUser,
                         });
                     }
                     else
@@ -251,12 +259,13 @@ namespace DS.Controllers
                 }
                 else
                 {
-                    var errorMsg = new
+                    var errorMessage = new
                     {
                         message = "Вход не выполнен",
                         error = ModelState.Values.SelectMany(e => e.Errors.Select(er => er.ErrorMessage))
                     };
-                    return Created("", errorMsg);
+                    return BadRequest(errorMessage);
+                    //return Created("", errorMessage);
                 }
             }
             catch (Exception ex)
@@ -320,6 +329,253 @@ namespace DS.Controllers
                 });
             }
         }
+
+        [HttpPost]
+        [Authorize]
+        [Route("api/account/uploadProfileImage")]
+        public async Task<IActionResult> UploadProfileImage(IFormFile file)
+        {
+            try
+            {
+                if (file != null && file.Length > 0)
+                {
+                    // Извлекаем Id пользователя из токена (клейм NameIdentifier)
+                    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    // Путь к папке, где будут храниться изображения
+                    var uploadsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
+
+                    // Если папка не существует, создаем её
+                    if (!Directory.Exists(uploadsDirectory))
+                    {
+                        Directory.CreateDirectory(uploadsDirectory);
+                    }
+
+                    // Получаем расширение файла
+                    var fileExtension = Path.GetExtension(file.FileName).ToLower();
+
+                    // Список разрешенных расширений
+                    var allowedExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".bmp" };
+
+                    // Проверяем, что файл имеет разрешенное расширение
+                    if (!allowedExtensions.Contains(fileExtension))
+                    {
+                        return BadRequest(new { message = "Недопустимый формат файла" });
+                    }
+
+                    // Генерация имени файла
+                    var fileName = $"{userIdClaim}{fileExtension}";
+                    var filePath = Path.Combine(uploadsDirectory, fileName);
+
+                    // Проверяем, есть ли уже файл изображения для этого пользователя
+                    var existingImagePath = Path.Combine(uploadsDirectory, $"{userIdClaim}.*");
+                    var existingImageFile = Directory.GetFiles(uploadsDirectory, $"{userIdClaim}.*").FirstOrDefault();
+
+                    // Если файл существует, удаляем его
+                    if (existingImageFile != null && System.IO.File.Exists(existingImageFile))
+                    {
+                        System.IO.File.Delete(existingImageFile);
+                    }
+
+                    // Сохранение нового файла
+                    using (var stream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await file.CopyToAsync(stream);
+                    }
+
+                    // Возвращаем путь к файлу
+                    var fileUrl = $"/images/{fileName}?timestamp={DateTime.Now.Ticks}";
+
+                    // Здесь можно обновить путь изображения в базе данных пользователя
+                    var user = await _userManager.GetUserAsync(User);
+                    user.ProfileImage = fileUrl;
+                    await _userManager.UpdateAsync(user);
+
+                    return Ok(new { profileImage = fileUrl });
+                }
+            }
+            catch (Exception ex)
+            {
+                return BadRequest("Ошибка загрузки файла: " + ex.Message);
+            }
+
+            return BadRequest("Ошибка загрузки файла.");
+        }
+
+
+        //[HttpPost]
+        //[Authorize]
+        //[Route("api/account/uploadProfileImage")]
+        //public async Task<IActionResult> UploadProfileImage(IFormFile file)
+        //{
+        //    try
+        //    {
+        //        if (file != null && file.Length > 0)
+        //        {
+        //            // Извлекаем Id пользователя из токена (клейм NameIdentifier)
+        //            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        //            // Путь к папке, где будут храниться изображения
+        //            var uploadsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
+
+        //            // Если папка не существует, создаем её
+        //            if (!Directory.Exists(uploadsDirectory))
+        //            {
+        //                Directory.CreateDirectory(uploadsDirectory);
+        //            }
+
+        //            // Получаем расширение файла
+        //            var fileExtension = Path.GetExtension(file.FileName).ToLower();
+
+        //            // Список разрешенных расширений
+        //            var allowedExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".bmp" };
+
+        //            // Проверяем, что файл имеет разрешенное расширение
+        //            if (!allowedExtensions.Contains(fileExtension))
+        //            {
+        //                return BadRequest(new { message = "Недопустимый формат файла" });
+        //            }
+
+        //            // Генерация имени файла
+        //            var fileName = $"{userIdClaim}{fileExtension}";//Path.GetFileName(file.FileName);
+        //            var filePath = Path.Combine(uploadsDirectory, userIdClaim);
+
+        //            // Сохранение файла
+        //            using (var stream = new FileStream(filePath, FileMode.Create))
+        //            {
+        //                await file.CopyToAsync(stream);
+        //            }
+
+        //            // Возвращаем путь к файлу
+        //            var fileUrl = $"/images/{userIdClaim}";
+
+        //            // Здесь можно обновить путь изображения в базе данных пользователя
+        //            var user = await _userManager.GetUserAsync(User);
+        //            user.ProfileImage = fileUrl;
+        //            await _userManager.UpdateAsync(user);
+
+        //            return Ok(new { FileUrl = fileUrl });
+        //        }
+        //    } catch (Exception ex) {
+        //        return BadRequest("Ошибка загрузки файла." + ex.Message);
+        //    }
+        //    return BadRequest("Ошибка загрузки файла.");
+
+
+        //}
+
+        // Получить аватарку в профиле пользователя
+        [HttpGet("getProfileImage")]
+        [Authorize]
+        public IActionResult GetProfileImage()
+        {
+            // Получаем имя пользователя из контекста или передаем как параметр
+            // Извлекаем Id пользователя из токена (клейм NameIdentifier)
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            //var userId = _userManager.; // Например, это может быть ID пользователя или его username
+            var imagePath = Path.Combine(_webHostEnvironment.WebRootPath, "images", $"{userIdClaim}");
+
+            if (!System.IO.File.Exists(imagePath))
+            {
+                return NotFound(new { message = "Изображение профиля не найдено" });
+            }
+
+            var fileBytes = System.IO.File.ReadAllBytes(imagePath);
+            return File(fileBytes, "image/jpeg");
+        }
+
+        [HttpGet("getUserPforileImage/{userId}")]
+        public IActionResult GetProfileImageUrl(string userId)
+        {
+            try
+            {
+                string? fileUrl = GetProfileImageUrlByUserId(userId);
+                if (fileUrl == null) return NotFound(new { message = "Image not found" });
+
+                // Возвращаем URL изображения
+                return Ok(new { profileImage = fileUrl });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest("Error while retrieving image URL: " + ex.Message);
+            }
+        }
+
+        public string? GetProfileImageUrlByUserId(string userId)
+        {
+            // Путь к папке, где хранятся изображения
+            var uploadsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
+
+            // Ищем файл, который соответствует userId с любым расширением
+            var filePath = Directory.GetFiles(uploadsDirectory, $"{userId}.*").FirstOrDefault();
+
+            if (filePath == null)
+            {
+                return null;
+            }
+
+            // Извлекаем имя файла и формируем URL
+            var fileName = Path.GetFileName(filePath);
+            var profileImage = $"/images/{fileName}?timestamp={DateTime.Now.Ticks}";
+            return profileImage ;
+        }
+
+
+
+        //Получение информации о профиле пользователя
+        [HttpGet("getUserProfileById/{id}")]
+        //[Authorize]
+        public async Task<IActionResult> GetUserProfileById(string id)
+        {
+            // Извлекаем Id пользователя из токена (клейм NameIdentifier)
+            //var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            //// Проверяем, совпадает ли идентификатор из токена с запрашиваемым
+            //if (userIdClaim == null || userIdClaim != id)
+            //{
+            //    return Forbid(); // Возвращаем ошибку доступа, если пользователь пытается запросить не свои данные
+            //}
+            try
+            {
+                var user = await _userManager.FindByIdAsync(id);
+                if (user == null)
+                {
+                    return BadRequest();
+                }
+
+                var resultUser = new userDTO(user);
+
+                //Заполнение полей:
+
+                resultUser.user_roles = (await _userManager.GetRolesAsync(user)).ToList();
+                // Инициализируем переменную для основной роли
+                string primaryRole = "Не определена"; // Инициализация с начальным значением
+                                                      // Проверяем, есть ли роль преподавателя
+                if (resultUser.user_roles.Contains("teacher"))
+                {
+                    primaryRole = "Преподаватель";
+                }
+                // Если нет, проверяем роль студента
+                else if (resultUser.user_roles.Contains("student"))
+                {
+                    primaryRole = "Обучающийся";
+                }
+                // Если нет, проверяем роль администратора
+                else if (resultUser.user_roles.Contains("admin"))
+                {
+                    primaryRole = "Администратор";
+                }
+                // В resultUser можем добавить основную роль
+                resultUser.PrimaryRole = primaryRole;
+
+                resultUser.profileImage = GetProfileImageUrlByUserId(resultUser.id);
+
+                return Ok(resultUser);
+            }
+            catch(Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+
 
         private Task<User> GetCurrentUserAsync() => _userManager.GetUserAsync(HttpContext.User);
 

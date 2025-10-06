@@ -13,6 +13,7 @@ namespace Interfaces.DTO
     {
         public practiceDTO(Practice practice)
         {
+            category = practice.Category;
             id = practice.Id;
             date = practice.Date;
             status = GetDescription(practice.Status);
@@ -28,7 +29,14 @@ namespace Interfaces.DTO
             teacherEmail = "Email преподавателя";
             studentEmail = "Email обучающегося";
             lessonStatus = practice.Status;
+
         }
+        public string title { get; set; } = string.Empty; // Тема/заглавие/шапка. Н-р: маневрирование в пределах перекрёстка
+
+        public string description { get; set; } = string.Empty; // Какое-либо описание
+
+        public string category { get; set; } = string.Empty;
+
         public practiceDTO() { status = "Неопределено"; }
         public LessonStatus lessonStatus { get; set; }
         public string? studentPhoneNumber { get; set; }

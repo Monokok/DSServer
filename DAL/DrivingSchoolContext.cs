@@ -52,10 +52,6 @@ public partial class DrivingSchoolContext : IdentityDbContext<User>//DbContext
                 .HasColumnName("id"); // Имя столбца в базе данных
             //.ValueGeneratedOnAdd() // Идентификатор пользователя задается вручную, а не генерируется автоматически
 
-            entity.Property(e => e.A_hours).HasColumnName("A_hours"); // Свойство a_hours связано с столбцом A_hours
-            entity.Property(e => e.B_hours).HasColumnName("B_hours"); // Свойство b_hours связано с столбцом B_hours
-            entity.Property(e => e.C_hours).HasColumnName("C_hours"); // Свойство c_hours связано с столбцом C_hours
-
             entity.Property(e => e.First_name)
                 .HasColumnType("text") // Определяем тип данных для столбца как текст
                 .HasColumnName("first_name"); // Имя столбца в базе данных
