@@ -9,6 +9,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Reflection.Metadata;
+using Swashbuckle.AspNetCore.Annotations;
+using System.Security.Claims;
+using System.Globalization;
+
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -23,6 +27,7 @@ namespace DS.Controllers
         private readonly IStudentService studentService;
         private readonly ILogger<PracticeLessonsController> _logger;
 
+
         public PracticeLessonsController(IStudentService studentService, ILogger<PracticeLessonsController> logger)
         {
             this.studentService = studentService;
@@ -32,7 +37,11 @@ namespace DS.Controllers
 
         // GET api/<LessonsController>/5
         [HttpGet("{id}")]
-        [Authorize(Roles = "student, teacher" )]
+        //[Authorize(Roles = "student, teacher" )]
+        [SwaggerOperation(
+            Summary = "Получение списка занятий для пользователя по его id",
+            Description = "Этот метод позволяет получить список занятий для пользователя по его id"
+        )]
 
         public async Task<ActionResult<IEnumerable<practiceDTO>>> GetPracticeLessons(string id)
         {
@@ -57,19 +66,49 @@ namespace DS.Controllers
 
         // GET api/<LessonsController>/5
         [HttpGet("{teacherId}/{DayMonthYear}")]
-        [Authorize(Roles = "user, teacher")]
-
-        public ActionResult<IEnumerable<string>> GetTimesForLessons(string teacherId, DateTime DayMonthYear)
+        //[Authorize(Roles = "user, teacher")]
+        [SwaggerOperation(
+            Summary = "Получение списка доступных вариантов записи к преподавателю на конкретный день",
+            Description = "Этот метод позволяет получить список доступных вариантов времени для записи к преподавателю"
+        )]
+        public async Task<ActionResult<IEnumerable<string>>> GetTimesForLessonsAsync(string teacherId, string DayMonthYear)
         {
             try
             {
-                var Times = studentService.GetAvailableHours(teacherId, DayMonthYear);
-                List<string> times = new List<string>();
-                foreach (var item in Times)
+                DateTime selectedDate;
+
+                // Попытаться преобразовать строку в DateTime с точным форматом
+                if (DateTime.TryParseExact(DayMonthYear, "dd.MM.yyyy",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out selectedDate))
                 {
-                    times.Add(item.ToShortTimeString());
+                    // Получаем список всех доступных времён
+                    var Times = await studentService.GetAvailableHours(teacherId, selectedDate);
+
+                    // Текущее время
+                    DateTime now = DateTime.Now;
+
+                    // Если дата в прошлом, возвращаем пустой список
+                    if (selectedDate < now.Date)
+                    {
+                        return new List<string>();
+                    }
+
+                    // Фильтруем времена, которые прошли, если это текущий день
+                    List<string> times = Times
+                        .Where(item => !(selectedDate.Date == now.Date && item < now))
+                        .Select(item => item.ToShortTimeString())
+                        .ToList();
+
+                    //foreach (var item in Times)
+                    //{
+                    //    times.Add(item.ToShortTimeString());
+                    //}
+                    return times;
                 }
-                return times;
+                else
+                {
+                    return BadRequest("Некорректная дата.");
+                }
             }
             catch (Exception ex)
             {
@@ -83,103 +122,204 @@ namespace DS.Controllers
 
         // POST api/<LessonsController>
         [HttpPost]
-        [Authorize(Roles = "user, teacher")]
-        public async Task<ActionResult<practiceDTO>> PostLesson(practiceDTO lsn/*DateTime date, int StudentID, int TeacherID, int TypeID*/)
+        //[Authorize(Roles = "student, teacher")]
+        [SwaggerOperation(
+            Summary = "Создание занятия",
+            Description = "Этот метод позволяет создать новое занятие, предоставив необходимые данные."
+        )]
+        public async Task<ActionResult<practiceDTO>> PostLesson([FromBody] LessonRequest request)
         {
-
-            //
             try
             {
-
+                // Проверка модели
                 if (!ModelState.IsValid)
                 {
                     return BadRequest(ModelState);
                 }
-                if (lsn.student_id == null) return BadRequest(ModelState);
 
-
-                //если переданная меньше текущей на сервере - нельзя сделать запись в прошлое.
-                if (lsn.date < DateTime.Now) { return StatusCode(406); }
-
-                //if (await studentService.CheckCorrectTeacherAndCathegoryAsync(lsn.teacher_id, lsn.cathegory_id) == false)
-                //{
-                //    return StatusCode(422);
-                //}
-                if (studentService.IsBusyDate(lsn)) return StatusCode(409); //если дата у преподавателя занята
-                practiceDTO les = new practiceDTO
+                if (request.StudentId == null || request.TeacherId == null)
                 {
-                    date = lsn.date,
-                    stringDate = lsn.date.ToShortDateString() + " " + lsn.date.ToShortTimeString(),
-                    /*
-                     * type_id - статус занятия
-                     * case 0: "Назначено"; break;
-                     * case 1: "Отменено"; break;
-                     * case 2: "Проведено"; break;
-                     * default: "Неопредено"; break;
-                     */
-                    //type_id = 0,// при создании новго занятия - оно всегда должно иметь тип "Назначено"
-                    //type = "Назначено",
-                    student_id = lsn.student_id,
-                    teacher_id = lsn.teacher_id,
-                    //cathegory_id = lsn.cathegory_id,
-                };
-                les.id = await studentService.AddLessonAsync(les);
-                les.teacherName = await studentService.GetTeacherNameByIdAsync(lsn.teacher_id);
-                les.teacherPhoneNumber = await studentService.GetTeacherNumberByIdAsync(lsn.teacher_id);
+                    return BadRequest("Student ID and Teacher ID are required.");
+                }
 
-                return CreatedAtAction("GetLesson", new { id = les.id }, les);
+                string[] formats = { "dd.MM.yyyy H:mm", "dd.MM.yyyy HH:mm" }; // Оба формата
+                // Парсим строку в DateTime
+                DateTime dateTime = DateTime.ParseExact(request.DateTime, formats, CultureInfo.InvariantCulture);
+
+
+
+                // Получение информации о преподавателе
+                var teachers = await studentService.GetTeachersList();
+                var teacher = teachers.Where(t => t.id == request.TeacherId).FirstOrDefault();
+                if (teacher == null)
+                {
+                    return BadRequest("Teacher is not exist");
+                }
+                var students = await studentService.GetStudentsListAsync();
+                var student = students.Where(st => st.id == request.StudentId).FirstOrDefault();
+                if (student == null)
+                {
+                    return BadRequest("Student is not exist");
+                }
+
+                // Проверка на запись в прошлое
+                if (dateTime < DateTime.Now)
+                {
+                    return StatusCode(406); // Not Acceptable
+                }
+
+
+                // Проверка занятости преподавателя
+                if (await studentService.IsBusyDateAsync(dateTime, request.StudentId, request.TeacherId))
+                {
+                    return StatusCode(409); // Conflict
+                }
+
+                // Создание нового занятия
+                var newLesson = new practiceDTO
+                {
+                    date = dateTime,
+                    stringDate = dateTime.ToString("g"), // Формат даты и времени
+                    student_id = request.StudentId,
+                    category = request.Category,
+                    studentName = student.first_name + ' ' + student.middle_name + ' ' + student.last_name,
+                    studentEmail = student.email,
+                    studentPhoneNumber = student.number,
+                    teacher_id = request.TeacherId,
+                    teacherName = teacher.first_name + " " + teacher.middle_name + " " + teacher.last_name,
+                    teacherEmail = teacher.email,
+                    teacherPhoneNumber = teacher.number,
+                    lessonStatus = LessonStatus.Assigned,
+                    status = "Назначено",
+                    description = "Практическое занятие по вождению",
+                    title = "Запись на занятие",
+                };
+
+                // Добавление занятия в БД
+                 var createdLessonId = await studentService.AddLessonAsync(newLesson);
+
+                if (teacher == null)
+                {
+                    return NotFound("Teacher not found.");
+                }
+
+                // Формирование ответа
+                var response = new practiceDTO
+                {
+                    id = createdLessonId,
+                    date = newLesson.date,
+                    stringDate = newLesson.date.ToString("g"), // Формат даты и времени
+                    student_id = newLesson.student_id,
+                    category = newLesson.category,
+                    studentName = student.first_name + ' ' + student.middle_name + ' ' + student.last_name,
+                    studentEmail = student.email,
+                    studentPhoneNumber = student.number,
+                    teacher_id = newLesson.teacher_id,
+                    teacherName = teacher.first_name + " " + teacher.middle_name + " " + teacher.last_name,
+                    teacherEmail = teacher.email,
+                    teacherPhoneNumber = teacher.number,
+                    lessonStatus = LessonStatus.Assigned,
+                    status = "Назначено",
+                    description = "Практическое занятие по вождению",
+                    
+                    title = "Запись на занятие",
+                    
+                    
+                };
+
+                return CreatedAtAction(nameof(PostLesson), new { id = response.id }, response);
             }
             catch (Exception ex)
             {
-                //логирование ошибки
+                // Логирование ошибки
                 _logger.LogError(ex, "Ошибка при создании занятия");
-
-                return StatusCode(500);
+                return StatusCode(500); // Internal Server Error
             }
+        }
+
+        // Модель запроса для нового занятия
+        public class LessonRequest
+        {
+            public string DateTime { get; set; } = string.Empty;
+            public string StudentId { get; set; } = string.Empty;
+            public string TeacherId { get; set; } = string.Empty;
+            public string Category { get; set; } = string.Empty;
         }
 
         // PUT api/<LessonsController>/5
-        [HttpPut("{lessonId}/{typeId}")]
-        public async Task<ActionResult> CancelAndUpdateLesson(int lessonId, int typeId)//id урока и type на который хотим сменить
+        [HttpPut("{lessonId}")]
+        [Authorize(Roles = "student, teacher")]
+        [SwaggerOperation(
+    Summary = "Отмена занятия",
+    Description = "Этот метод позволяет отменить занятие. Обучающийся - не менее, чем за 24 часа, преподаватель - сразу."
+)]
+        public async Task<ActionResult> CancelTheLesson(int lessonId)//, int typeId)
         {
-            try
+            // Получаем текущего пользователя из токена
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier); // Получаем ID пользователя из JWT токена
+            var userRole = User.FindFirstValue(ClaimTypes.Role); // Получаем роль пользователя из JWT токена
+
+            // Получаем занятие по ID
+            var lessonsAsync = await studentService.GetAllMyLessons(userId);
+            var lesson = 
+                lessonsAsync.FirstOrDefault(l => l.id == lessonId);
+
+            if (lesson == null)
             {
-                var lesson = await studentService.GetLesson(lessonId);
-                if (lesson == null) return StatusCode(404);//если нет такого занятия
-                else if (lesson.lessonStatus == LessonStatus.Assigned)//0 = назначено. Если урок уже либо отменен, либо проведен, либо пр - возврат ошибки
-                {
-                    return StatusCode(400);
-                }
-                else
-                {
-                    await studentService.UpdateLessonAsync(lessonId, typeId);
-                    return StatusCode(200);
-                }
+                return NotFound(new { Message = "Занятие не найдено." });
             }
-            catch (Exception ex)
+
+            // Проверяем, может ли пользователь отменить занятие
+            if (lesson.lessonStatus == LessonStatus.Canceled)
             {
-                // Логирование ошибки
-                _logger.LogError(ex, "Ошибка при обновлении занятия. Метод CancelAndUpdateLesson(int lessonId, int typeId)");
-                return StatusCode(500);
+                return BadRequest(new { Message = "Занятие уже отменено." });
             }
+
+            // Получаем дату и время начала занятия
+            var lessonStartTime = lesson.date;
+
+            // Логика отмены занятия:
+            if (userRole == "teacher")
+            {
+                // Преподаватель может отменить занятие в любой момент
+                lesson.lessonStatus = LessonStatus.Canceled;
+                //lesson.CancellationDate = DateTime.Now; // Устанавливаем дату отмены
+            }
+            else if (userRole == "student")
+            {
+                // Студент может отменить занятие только если до начала занятия остается более 24 часов
+                if (lessonStartTime < DateTime.Now.AddHours(24))
+                {
+                    return BadRequest(new { Message = "Студент может отменить занятие не менее чем за 24 часа до его начала." });
+                }
+                lesson.lessonStatus = LessonStatus.Canceled;
+                //lesson.CancellationDate = DateTime.Now; // Устанавливаем дату отмены
+            }
+
+            // Сохраняем изменения
+            await studentService.UpdateLessonAsync(lesson.id, (int)LessonStatus.Canceled);
+
+            // Возвращаем успешный ответ
+            return Ok(new { Message = "Занятие успешно отменено." });
         }
 
-        // DELETE api/<LessonsController>/5
-        [HttpDelete("{id}")]
-        [Authorize(Roles = "teacher")]
-        public async Task<HttpStatusCode> Delete(int id)
-        {
-            try
-            {
-                await studentService.DeleteLessonAsync(id);
-                return HttpStatusCode.OK;
-            }
-            catch (Exception ex)
-            {
-                // Логирование ошибки
-                _logger.LogError(ex, "Ошибка при удалении занятия");
-                return HttpStatusCode.InternalServerError;
-            }
-        }
+
+        //// DELETE api/<LessonsController>/5
+        //[HttpDelete("{id}")]
+        //[Authorize(Roles = "teacher")]
+        //public async Task<HttpStatusCode> Delete(int id)
+        //{
+        //    try
+        //    {
+        //        await studentService.DeleteLessonAsync(id);
+        //        return HttpStatusCode.OK;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        // Логирование ошибки
+        //        _logger.LogError(ex, "Ошибка при удалении занятия");
+        //        return HttpStatusCode.InternalServerError;
+        //    }
+        //}
     }
 }

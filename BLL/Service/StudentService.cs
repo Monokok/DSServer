@@ -25,77 +25,146 @@ namespace BLL.Services
             _userManager = userManager;
         }
 
-        public Task<int> AddLessonAsync(practiceDTO lesson)
+        public async Task<int> AddLessonAsync(practiceDTO lesson)
         {
-            throw new NotImplementedException();
+            // Создаем новое занятие
+            var newLesson = new Practice
+            {
+                Date = lesson.date,
+                StudentId = lesson.student_id,
+                TeacherId = lesson.teacher_id,
+                Description = lesson.description,
+                Title = lesson.title
+            };
+
+            try
+            {
+                // Сохраняем занятие в базе данных
+                db.PracticeLessons.CreateAsync(newLesson);
+
+                // Сохраняем изменения в базе и возвращаем ID нового занятия
+                await db.Save();
+
+                return newLesson.Id;
+            }
+            catch (Exception ex)
+            {
+                // Логирование ошибки
+                Console.WriteLine($"Ошибка при добавлении занятия: {ex.Message}");
+                throw;
+            }
         }
 
-        public Task<bool> CheckCorrectTeacherAndCathegoryAsync(string teacher_id, int cathegory_id)
-        {
-            throw new NotImplementedException();
-        }
 
-        public Task DeleteLessonAsync(int lesson_id)
-        {
-            throw new NotImplementedException();
-        }
+        //public Task<bool> CheckCorrectTeacherAndCathegoryAsync(string teacher_id, int cathegory_id)
+        //{
+        //    throw new NotImplementedException();
+        //}
 
         public async Task<List<practiceDTO>> GetAllMyLessons(string user_id)//получение списка занятий для студента и преподавателя
         {
-            //определить какая роль у юзера?
-            throw new NotImplementedException();
-            //if (user_id == "undefined") throw new Exception("Аккаунт Undefined!");
-            //var account = await db.Users.GetItemAsync(user_id) ?? throw new Exception("Такого аккаунта в системе нет!");//получили аккаунт
+            // Получаем пользователя и его роли
+            var user = await _userManager.FindByIdAsync(user_id);
+            var userRoles = await _userManager.GetRolesAsync(user);
 
-            //// Получение пользователя по user_id
-            //var user = await _userManager.FindByIdAsync(user_id);
+            // Проверяем, является ли пользователь студентом
+            if (userRoles.Contains("student"))
+            {
+                // Получаем всех преподавателей и все занятия
+                var teachers = await _userManager.GetUsersInRoleAsync("teacher");
+                var lessons = await db.PracticeLessons.GetListAsync();
 
-            //switch (account.AccountType)//узнали кто обращается - тичер\юзер
-            //{
-            //    case 0: //студент
-            //        var teachers = await GetTeachersList();
-            //        var lessons = await db.Lessons.GetListAsync(); //получили все занятия
-            //        lessons = lessons.Where(les => les.StudentId == user_id).ToList();//отфильтровали по конкретному студенту
-            //        var DTOs = lessons.Select(les => new lessonDTO(les)).ToList();//сделали DTO
-            //        foreach (var lsns in DTOs)
-            //        {
-            //            foreach (var tchrs in teachers)
-            //            {
-            //                if (lsns.teacher_id == tchrs.id)
-            //                {
-            //                    lsns.teacherName = tchrs.value;//кладём ФИО в DTO урока. name; value = ФИО. name = ИО
-            //                    lsns.teacherPhoneNumber = tchrs.PhoneNumber;//кладём номер телефона в DTO урока
-            //                }
-            //            }
-            //        }
-            //        return DTOs;//вернули
-            //    case 1: //преподаватель
-            //        var allCurrentTeacherLessons = await db.Lessons.GetListAsync(); //нашли все занятия
-            //        var allCurrentTeacherLessonsDTOs = allCurrentTeacherLessons.Where(lsn => lsn.TeacherId ==  user_id)
-            //            .ToList()//оставили лишь те, которые принадлежат teacher'у
-            //            .Select(i => new lessonDTO(i)).ToList();//сделали удобный DTO класс здорового человека.
+                // Фильтруем занятия для конкретного студента
+                var studentLessons = lessons.Where(les => les.StudentId == user_id).ToList();
 
-            //        var students = await db.Users.GetListAsync();
-            //        students = students.Where(st => st.AccountType == 0).ToList(); //нашли всех студентов
-            //        //докидываем в уроки ФИО студентов
-            //        foreach (var item in allCurrentTeacherLessonsDTOs)//перебираем все уроки
-            //        {
-            //            foreach (var st in students)//перебираем студентов
-            //            {
-            //                if (item.student_id == st.Id)
-            //                {//подхватываем ФИО и номер телефона в DTO класс урока
-            //                    item.studentName = st.FirstName + " " + st.MiddleName + " " + st.LastName + " " + st.Email;
-            //                    item.studentPhoneNumber = st.PhoneNumber;
-            //                }
-            //            }
-            //        }
-            //        return allCurrentTeacherLessonsDTOs;
-            //    default: throw new Exception("Неизвестный тип аккаунта!"); 
+                // Преобразуем занятия в LessonDTO
+                var lessonDTOs = studentLessons.Select(les => new practiceDTO(les)).ToList();
+
+                // Заполняем данные преподавателей в LessonDTO
+                foreach (var lesson in lessonDTOs)
+                {
+                    lesson.title = "Практическое занятие";
+                    lesson.description = "Отработка навыков вождения";
+                    lesson.studentPhoneNumber = user.PhoneNumber;
+                    lesson.studentEmail = user.Email;
+                    lesson.studentName = user.First_name + " " + user.Middle_name + " " + user.Last_name;
+                    
+                    var teacher = teachers.FirstOrDefault(t => t.Id == lesson.teacher_id);
+                    if (teacher != null)
+                    {
+                        lesson.teacherName = $"{teacher.First_name} {teacher.Middle_name} {teacher.Last_name}";
+                        lesson.teacherPhoneNumber = teacher.PhoneNumber;
+                        lesson.teacherEmail = teacher.Email;
+                    }
+                }
+                return lessonDTOs;
+            }
+            // Проверяем, является ли пользователь преподавателем
+            else if (userRoles.Contains("teacher"))
+            {
+                // Получаем все занятия, относящиеся к этому преподавателю
+                var teacherLessons = await db.PracticeLessons.GetListAsync();
+                var teacherLessonDTOs = teacherLessons
+                    .Where(lsn => lsn.TeacherId == user_id)
+                    .Select(lsn => new practiceDTO(lsn))
+                    .ToList();
+
+                // Получаем всех студентов
+                var students = await _userManager.GetUsersInRoleAsync("student");
+
+                // Заполняем данные студентов в LessonDTO
+                foreach (var lesson in teacherLessonDTOs)
+                {
+                    var student = students.FirstOrDefault(st => st.Id == lesson.student_id);
+                    lesson.title = "Практическое занятие";
+                    lesson.description = "Отработка навыков вождения";
+                    lesson.teacherName = $"{user.First_name} {user.Middle_name} {user.Last_name}";
+                    lesson.teacherPhoneNumber = user.PhoneNumber;
+                    lesson.teacherEmail = user.Email;
+                    if (student != null)
+                    {
+                        lesson.studentEmail = student.Email;
+                        lesson.studentPhoneNumber = student.PhoneNumber;
+                        lesson.studentName = $"{student.First_name} {student.Middle_name} {student.Last_name}";
+                        lesson.studentPhoneNumber = student.PhoneNumber;
+                    }
+                }
+                return teacherLessonDTOs;
+            }
+
+            // Если роль не определена, выбрасываем исключение
+            throw new Exception("Неизвестный тип роли пользователя!");
         }
-
-        public List<DateTime> GetAvailableHours(string _teacher_id, DateTime _DayMonthYear)
+        public async Task<List<DateTime>> GetAvailableHours(string _teacher_id, DateTime _DayMonthYear)
         {
-            throw new NotImplementedException();
+            // Получаем список уже занятых времён для указанного преподавателя
+            var occupiedSlotsAsync = await db.PracticeLessons.GetListAsync();
+            var occupiedSlots = occupiedSlotsAsync
+                .Where(slot => slot.TeacherId == _teacher_id 
+                    && 
+                      slot.Date.Date == _DayMonthYear.Date 
+                      &&
+                      slot.Status == LessonStatus.Assigned
+                      )
+                .Select(slot => slot.Date.TimeOfDay)//только время
+                .ToHashSet();//быстрый поиск
+
+            // Задаем интервалы времени (например, каждые 1.5 часа)
+            var startTime = new TimeSpan(8, 0, 0); // Начало записи (08:00)
+            var endTime = new TimeSpan(18, 0, 0);  // Конец записи (18:00)
+            var interval = TimeSpan.FromMinutes(90); // Интервал между занятиями 1.5 часа
+
+
+            // Формируем список доступных слотов
+            var availableSlots = new List<DateTime>();
+            for (var time = startTime; time < endTime; time += interval)
+            {
+                if (!occupiedSlots.Contains(time)) // Проверяем, занято ли время
+                {
+                    availableSlots.Add(_DayMonthYear.Date + time); // Добавляем свободное время
+                }
+            }
+            return availableSlots;
         }
 
         public Task<practiceDTO?> GetLesson(int lesson_id)
@@ -120,253 +189,72 @@ namespace BLL.Services
             // Преобразование пользователей в DTO
             return students.Select(u => new userDTO(u)).ToList();
         }
-        public Task<string> GetTeacherNameByIdAsync(string id)
+        public async Task<string> GetTeacherNameByIdAsync(string id)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
+            // Поиск учителя по ID в базе данных
+            var teacher = await db.Users.GetItemAsync(id);
+
+            // Проверка, найден ли учитель
+            if (teacher == null)
+            {
+                return null; // Или выбросьте исключение, если необходимо
+            }
+
+            // Возвращаем имя учителя
+            return teacher.First_name + teacher.Middle_name + teacher.Last_name; // Предполагается, что у учителя есть свойство Name
         }
 
-        public Task<string> GetTeacherNumberByIdAsync(string id)
+        public async Task<List<userDTO>> GetTeachersList()
         {
-            throw new NotImplementedException();
+            var teachers = await _userManager.GetUsersInRoleAsync("teacher");
+            return teachers.Select(teach => new userDTO(teach)).ToList();
         }
 
-        public Task<List<userDTO>> GetTeachersList()
+
+
+        public async Task<bool> IsBusyDateAsync(DateTime date, string studentId, string teacherId)
         {
-            throw new NotImplementedException();
+            // Обрезаем секунды и миллисекунды для сравнения
+            var dateToCompare = new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, 0);
+
+            // Длительность занятия в минутах (например, 90 минут)
+            var lessonDuration = TimeSpan.FromMinutes(90);
+
+            // Получаем все занятия из базы
+            var lessons = await db.PracticeLessons.GetListAsync();
+
+            // Проверяем, пересекается ли указанное время с существующими занятиями
+            var isTimeOverlapping = lessons.Any(l =>
+                l.TeacherId == teacherId &&                 // Для того же преподавателя
+                l.Status == LessonStatus.Assigned &&        // Только "назначенные" занятия
+                l.Date.Date == dateToCompare.Date &&        // В тот же день
+                (
+                    // Указанная дата попадает в существующий интервал занятия
+                    (dateToCompare >= l.Date && dateToCompare < l.Date.Add(lessonDuration)) ||
+
+                    // Новый интервал пересекает существующее занятие
+                    (l.Date >= dateToCompare && l.Date < dateToCompare.Add(lessonDuration))
+                ));
+
+            return isTimeOverlapping;
         }
 
-        public bool IsBusyDate(practiceDTO lsn)
+
+
+        public async Task UpdateLessonAsync(int id, int type)
         {
-            throw new NotImplementedException();
+            var lesson = await db.PracticeLessons.GetItemAsync(id);
+
+            if (lesson != null)
+            {
+                lesson.Status = (LessonStatus)type;
+                await db.Save();// ChangesAsync();
+            }
+            //throw new NotImplementedException();
         }
-
-        public Task UpdateLessonAsync(int id, int type)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-        //public async Task<lessonDTO?> GetLesson(int lesson_id)
-        //{
-        //    var lesson = await db.Lessons.GetItemAsync(lesson_id);
-        //    if (lesson == null) throw new Exception("Занятие с Id = {$lessons_id} не найдено!");
-        //    else return new lessonDTO(lesson);
-        //}
-        //public async Task<int> AddLessonAsync(lessonDTO lesson)//при добавлении записи на занятие в таблице orders создаётся запись об "оплате"
-        //{
-        //    Lesson newLesson = new Lesson //создали занятие и сохранили в бд (уже с ID)
-        //    {
-        //        CathegoryId = lesson.cathegory_id,
-        //        Date = lesson.date,
-        //        StudentId = lesson.student_id,
-        //        TeacherId = lesson.teacher_id,
-        //        TypeId = lesson.type_id,
-        //    };
-        //     db.Lessons.CreateAsync(newLesson);
-        //    await db.Save(); 
-        //    var lessons = await db.Lessons.GetListAsync();
-
-        //    //db.Payments.CreateAsync( //создали запись в таблице об оплате
-        //    //    new Payment
-        //    //    {
-        //    //        Date = lesson.date,
-        //    //          StudentId = lesson.student_id,
-        //    //           TypeId = 0, //0 - оплачено
-        //    //        LessonId = newLesson.Id,// ID берётся уже тот, что сделала для занятия сама БД
-                     
-        //    //    });
-        //    //await db.Save();
-
-        //    return lessons.Last().Id;
-        //}
-
-        //public async Task DeleteLessonAsync(int lesson_id)
-        //{
-        //    await db.Lessons.DeleteAsync(lesson_id);
-        //    //удаляя запись на занятие удаление записи об оплате занятия не должно быть - факт записи и получения средств должен быть
-        //}
-
-        //public async Task<List<userDTO>> GetTeachersList()
-        //{
-        //    var teachers = await db.Users.GetListAsync();
-        //    return teachers.Where(i => i.AccountType == 1).Select(i => new userDTO(i)).ToList();
-        //}
-
-        //public async Task<string> GetTeacherNameByIdAsync(string id)
-        //{
-        //    if (id == null) { throw new Exception("Переданный id преподавателя является null"); }
-        //    var teacher = await db.Users.GetItemAsync(id);
-        //    if (teacher != null) return teacher.LastName + " " + teacher.FirstName + " " + teacher.MiddleName + " " + teacher.Email;
-        //    else throw new Exception("Не удалось найти преподавателя с таким id");
-        //}
 
         
-        //public List<DateTime> GetAvailableHours(string _teacher_id, DateTime _DayMonthYear)
-        //{
-
-        //    List<DateTime> hours = new List<DateTime>();
-        //    for (int i = 0; i <= 20; i++) //время записи с 9 до 19:00
-        //    {
-        //        if (i == 0 && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 9, 0, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 9, 0, 0));
-        //        else if (i == 1
-        //            && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 9, 30, 0), _teacher_id)
-        //            ) hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 9, 30, 0));
-        //        else if (i == 2 && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 10, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 10, 00, 0));
-        //        else if (i == 3 && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 10, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 10, 30, 0));
-        //        else if (i == 4 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 11, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 11, 00, 0));
-        //        else if (i == 5 && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 11, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 11, 30, 0));
-        //        else if (i == 6 && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 12, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 12, 00, 0));
-        //        else if (i == 7 && CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 12, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 12, 30, 0));
-        //        else if (i == 8 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 13, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 13, 00, 0));
-        //        else if (i == 9 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 13, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 13, 30, 0));
-        //        else if (i == 10 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 14, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 14, 00, 0));
-        //        else if (i == 11 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 14, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 14, 30, 0));
-        //        else if (i == 12 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 15, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 15, 00, 0));
-        //        else if (i == 13 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 15, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 15, 30, 0));
-        //        else if (i == 14 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 16, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 16, 00, 0));
-        //        else if (i == 15 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 16, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 16, 30, 0));
-        //        else if (i == 16 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 17, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 17, 00, 0));
-        //        else if (i == 17 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 17, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 17, 30, 0));
-        //        else if (i == 18 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 18, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 18, 00, 0));
-        //        else if (i == 19 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 18, 30, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 18, 30, 0));
-        //        else if (i == 20 &&  CheckAvailableDateAsync(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 19, 00, 0), _teacher_id))
-        //            hours.Add(new DateTime(_DayMonthYear.Year, _DayMonthYear.Month, _DayMonthYear.Day, 19, 00, 0));
-        //        //TimeSpan timeSpan = TimeSpan.FromHours(i);
-        //        //hours.Add());
-        //    }
-        //    return hours;
-        //}
-
-        //private bool CheckAvailableDateAsync(DateTime _time, string _teacher_id)
-        //{
-        //    var MLessonsOnTheSameDay = db.Lessons.GetList().Where(l => l.Date.Year == _time.Year && l.Date.Month == _time.Month && l.Date.Day == _time.Day && l.TeacherId == _teacher_id && l.TypeId == 0)//список занятий в тот же день
-        //        .OrderBy(l => l.Date);//сортированнй по возрастанию
-
-        //    List<lessonDTO> LessonsOnTheSameDay = new List<lessonDTO>();// = (List<lessonDTO>)MLessonsOnTheSameDay.Select(i => new lessonDTO(i));
-        //    foreach (var item in MLessonsOnTheSameDay)
-        //    {
-        //        LessonsOnTheSameDay.Add(new lessonDTO(item));
-        //    }
-
-        //    lessonDTO ? LessonBefore = null, LessonAfter = null;
-        //    if (LessonsOnTheSameDay.LastOrDefault(l => l.date <= _time) != null)
-        //    {
-        //        LessonBefore = LessonsOnTheSameDay.LastOrDefault(l => l.date <= _time);
-
-        //    };//получаем последний урок, что меньше (по дате) текущей переданной даты для записи
-        //    if (LessonBefore == null)//уроков до нету - сделаем урок с очень "старой" датой
-        //        LessonBefore = new lessonDTO
-        //        {
-        //            date = new DateTime(1966, 1, 1),
-        //            //car_id = 0,
-        //            cathegory_id = 0,
-        //             teacherName = "",
-        //               student_id = "",
-        //                teacher_id = "",
-        //                 type_id = 0, 
-                          
-        //        };
-        //    if (LessonsOnTheSameDay.FirstOrDefault(l => l.date >= _time) != null)
-        //    {
-        //        LessonAfter = LessonsOnTheSameDay.FirstOrDefault(l => l.date >= _time);
-        //    }
-        //    if (LessonAfter == null)//уроков после нету - сделаем урок с очень "будущей" датой
-        //        LessonAfter = new lessonDTO
-        //        {
-        //            date = new DateTime(3995, 1, 1),
-        //            cathegory_id = 0,
-        //            teacherName = "",
-        //            student_id = "",
-        //            teacher_id = "",
-        //            type_id = 0,
-        //        };
-        //    if ((_time - LessonBefore.date).TotalHours > 1 && (_time - LessonBefore.date).TotalMinutes >= 15) //смотрим разницу по времени с занятиемДо
-        //    {
-        //        if ((LessonAfter.date - _time).TotalHours > 1 && (LessonAfter.date - _time).TotalMinutes >= 15)//смотрим разницу по времени с занятиемПосле
-        //        {
-        //            return true;
-        //        }
-        //    }
-        //    return false;
-        //}
-
-        //public bool IsBusyDate(lessonDTO lsn)//true - если есть занятия "назначенные" (=занятый). false - если нет назначенных (=незанятый час|слот|время)
-        //{
-        //    //находим занятия которые будут у того же teacher
-        //    //в тот же Date
-        //    //и при этом эти занятии должны быть "назначены" а не отменены - если "отменены" - значит время доступно для записи.
-        //    var lesson = db.Lessons.GetList().Where(l => l.Date == lsn.date && l.TeacherId == lsn.teacher_id && l.TypeId == 0).FirstOrDefault();
-        //    if (lesson == null) return false;
-        //    else return true;
-        //}
-
-        //public async Task<bool> CheckCorrectTeacherAndCathegoryAsync(string teacher_id, int cathegory_id)
-        //{
-        //    var teacher = await db.Users.GetItemAsync(teacher_id);
-        //    if (teacher == null) return false;
-        //    //cathegory_id = 0 = A, 1 = B, 2 = C
-        //    switch (cathegory_id)
-        //    {
-        //        case 0:
-        //            if (teacher.TeachesCategoryA == true) return true;//если запись на А и преподаватель рил обучает на А - true
-        //            break;
-        //        case 1:
-        //            if (teacher.TeachesCategoryB == true) return true; break;
-        //        case 2:
-        //            if (teacher.TeachesCategoryC == true) return true; break;
-        //        default:  break;
-        //    }
-        //    return false;
-        //}
-
-        //public async Task UpdateLessonAsync(int id, int type)//обновление занятия - отменено\проведено
-        //{
-        //    var lesson = await db.Lessons.GetItemAsync(id);
-        //    if (lesson == null) throw new Exception("Переданный id занятия является null");
-        //    lesson.TypeId = type;
-        //    db.Lessons.Update(lesson);//обновив занятие - нужно при отмене в таблице оплат выставить "возврат средств"
-
-        //    if (type != 1) //если мы не хотим отменить занятие (type != 1) - то изменения в оплате не трогаем и выходим
-        //        return;
-        //    ////Иначе обновление оплаты:
-        //    //Payment? currentPayment;
-        //    //var payment = await db.Payments.GetListAsync();//получили весь список
-        //    //if (payment == null) throw new Exception("Не удалось найти какие-либо сведения об оплате занятий!");
-        //    //currentPayment = payment.FirstOrDefault(i => i.LessonId == id);//находим оплату именно этого занятия
-        //    //if (currentPayment == null) throw new Exception("Оплата занятия с ID = {$id} не найдена!");
-        //    //else
-        //    //{
-        //    //    currentPayment.TypeId = 1;//1 = возврат средств за отмену
-        //    //    db.Payments.Update(currentPayment);//обновляем данные
-        //    //}
-        //    //return;
-        //}
-
-        //public async Task<string> GetTeacherNumberByIdAsync(string id)
-        //{
-        //    if (id == null) { throw new Exception("Переданный id преподавателя является null"); }
-        //    var teacher = await db.Users.GetItemAsync(id);
-        //    if (teacher != null) return teacher.PhoneNumber;
-        //    else throw new Exception("Не удалось найти преподавателя с таким id");
-        //}
+    }
 };
 

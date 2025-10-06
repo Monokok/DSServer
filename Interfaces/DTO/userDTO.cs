@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace Interfaces.DTO
@@ -13,37 +14,35 @@ namespace Interfaces.DTO
     {
         public userDTO(User user)
         {
-            isAuthenticated = true;
-            value = user.First_name + " " + user.Middle_name + " " + user.Last_name + " " + user.Email;
-            Email = user.Email;
-            PhoneNumber = user.PhoneNumber;
+            //isAuthenticated = true;
+            //value = user.First_name + " " + user.Middle_name + " " + user.Last_name + " " + user.Email;
+            email = user.Email;
+            number = user.PhoneNumber;
             id = user.Id;
-            name = user.First_name + " " + user.Last_name;
             first_name = user.First_name;
             middle_name = user.Middle_name;
             last_name = user.Last_name;
-            a_hours = user.A_hours;
-            b_hours = user.B_hours;
-            c_hours = user.C_hours;
-        }
-        public bool isAuthenticated { get; set; }
-        public string? id { get; set; }
-        public int a_hours { get; set; }
-        public string Email {  get; set; }
-        public string PhoneNumber {  get; set; }
-        public int b_hours { get; set; }
-        public int c_hours { get; set; }
-        public bool? TeachesCategoryA { get; set; }
-        public bool? TeachesCategoryB { get; set; }
-        public bool? TeachesCategoryC { get; set; }
-        public string first_name { get; set; }
+            name = $"{user.Last_name} {user.First_name} {user.Middle_name}";
+            balance = user.Balance;
+            registrationDate = user.RegistrationDate.ToString("dd.MM.yyyy");
+            birthDate = user.BirthDate.ToString("dd.MM.yyyy");
+            profileImage = user.ProfileImage;
+
+    }
         public string name { get; set; }
-        public string value { get; set; }
+        public string? profileImage { get; set; } // Путь к изображению
+        public string first_name { get; set; }
         public string middle_name { get; set; }
         public string last_name { get; set; }
-        //public string tnumber { get; set; }
-        public int paid_hours { get; set; }
-        //public string? userRole { get; set; }
+        public decimal balance { get; set; } // Баланс пользователя
+        public string registrationDate { get; set; }// Дата регистрации
+        public string birthDate { get; set; } // Дата рождения
+        public List<string>? user_roles { get; set; }
+        public string? id { get; set; }
+        public string email {  get; set; }
+        public string number {  get; set; }
 
+        [JsonPropertyName("userRole")]
+        public string PrimaryRole { get; set; } // Основная роль
     }
 }

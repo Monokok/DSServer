@@ -13,6 +13,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,6 +94,7 @@ builder.Services.AddIdentityCore<User>(options =>
 //builder.Services.AddScoped<SignInManager<User>>();
 builder.Services.AddScoped<UserManager<User>>();
 builder.Services.AddScoped<RoleManager<IdentityRole>>();
+builder.Services.AddScoped<RoleManager<IdentityRole>>();
 
 
 
@@ -123,6 +125,11 @@ builder.Services.Configure<IdentityOptions>(options =>
     options.Lockout.AllowedForNewUsers = true;
 });
 
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 10 * 1024 * 1024; // Максимальный размер файла 10 MB
+});
+
 
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -130,6 +137,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Driving School API", Version = "v1" });
+    c.EnableAnnotations(); // Включить поддержку аннотаций
 
     // Добавляем схему для авторизации через JWT
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -188,8 +196,13 @@ if (app.Environment.IsDevelopment()) //Swagger будет доступен только во время ра
 
 //app.UseHttpsRedirection();
 
+app.UseStaticFiles(); // Подключение статических файлов
+
+
 //app.UseCors();//CORS
-app.UseCors(builder => builder.AllowAnyOrigin());
+app.UseCors(builder => builder.AllowAnyOrigin().AllowAnyMethod()
+           .AllowAnyHeader());
+
 
 app.UseAuthentication();
 app.UseAuthorization();

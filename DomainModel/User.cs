@@ -6,9 +6,10 @@ namespace DomainModel
         public string First_name { get; set; } = null!;
         public string Middle_name { get; set; } = null!;
         public string Last_name { get; set; } = null!;
-        public int A_hours { get; set; }
-        public int B_hours { get; set; }
-        public int C_hours { get; set; }
+        public decimal Balance { get; set; } // Баланс пользователя
+        public DateTime RegistrationDate { get; set; } = DateTime.UtcNow; // Дата регистрации
+        public DateTime BirthDate { get; set; } // Дата рождения
+        public string ProfileImage { get; set; } = string.Empty; // Путь к изображению
 
         // Навигационное свойство для практик, где пользователь является студентом
         public virtual ICollection<Practice> StudentPractices { get; set; } = new List<Practice>();

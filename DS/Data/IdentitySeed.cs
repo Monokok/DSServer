@@ -68,6 +68,26 @@ namespace DS.Data
                     await userManager.AddToRoleAsync(teacher, "teacher");
                 }
             }
+            string teacherDmitryEmail = "dmitry.fedorov@mail.com";
+            string teacherDmitryPassword5 = "Aa123456!";
+            if (await userManager.FindByNameAsync(teacherDmitryEmail) == null)
+            {
+                User teacher = new User
+                {
+                    Email = teacherDmitryEmail,
+                    UserName = teacherDmitryEmail,
+                    First_name = "Дмитрий",
+                    Middle_name = "Игоревич",
+                    Last_name = "Федоров",
+                    PhoneNumber = "7(910)111-22-33"
+                };
+                IdentityResult result = await userManager.CreateAsync(teacher, teacherDmitryPassword5);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(teacher, "teacher");
+                }
+            }
+
 
             // Создание Пользователя
             string userEmail = "student@mail.com";
@@ -89,6 +109,65 @@ namespace DS.Data
                     await userManager.AddToRoleAsync(user, "student");
                 }
             }
+            string studentJohnEmail = "johnwick@mail.com";
+            string studentJohnPassword = "Aa123456!";
+            if (await userManager.FindByNameAsync(studentJohnEmail) == null)
+            {
+                User user = new User
+                {
+                    Email = studentJohnEmail,
+                    UserName = studentJohnEmail,
+                    First_name = "Джон",
+                    Middle_name = "Йованович",
+                    Last_name = "Уик",
+                    PhoneNumber = "7(910)999-99-99"
+                };
+                IdentityResult result = await userManager.CreateAsync(user, userPassword);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(user, "student");
+                }
+            }
+            string jackReacherEmail = "jack.reacher@mail.com";
+            string jackReacherPassword = "OneShot123!";
+            if (await userManager.FindByNameAsync(jackReacherEmail) == null)
+            {
+                User user = new User
+                {
+                    Email = jackReacherEmail,
+                    UserName = jackReacherEmail,
+                    First_name = "Джек",
+                    Middle_name = "Ли",
+                    Last_name = "Ричер",
+                    PhoneNumber = "7(910)321-45-67"
+                };
+                IdentityResult result = await userManager.CreateAsync(user, jackReacherPassword);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(user, "student");
+                }
+            }
+            string clarkKentEmail = "clark.kent@mail.com";
+            string clarkKentPassword = "Superman123!";
+            if (await userManager.FindByNameAsync(clarkKentEmail) == null)
+            {
+                User user = new User
+                {
+                    Email = clarkKentEmail,
+                    UserName = clarkKentEmail,
+                    First_name = "Кларк",
+                    Middle_name = "Джозефович",
+                    Last_name = "Кент",
+                    PhoneNumber = "7(910)555-67-89"
+                };
+                IdentityResult result = await userManager.CreateAsync(user, clarkKentPassword);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(user, "student");
+                }
+            }
+
+
         }
     }
 }
