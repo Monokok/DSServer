@@ -35,7 +35,7 @@
 
 | Компонент | Технология |
 |------------|-------------|
-| **Клиентская часть** | React, Ant Design |
+| **Клиентская часть** | React + Ant Design (Web), Kotlin (Android) | 
 | **Серверная часть** | ASP.NET Core WebAPI (.NET 8.0) |
 | **База данных** | MS SQL Server Express 2019 |
 | **Веб-сервер** | IIS + Kestrel |
